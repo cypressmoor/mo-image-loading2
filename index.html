@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片批量加载器</title>
+<!-- App 图标（用于添加到主屏幕） -->
+<link rel="apple-touch-icon" href="https://imgchr.com/i/pmaTJCn">
+<link rel="icon" href="https://imgchr.com/i/pmaTJCn" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<!-- 引入 JSZip 和 FileSaver -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<style>
+  :root {
+    --bg: #f8f7f5;
+    --surface: #ffffff;
+    --surface2: #f2f1ef;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.14);
+    --text: #1a1a18;
+    --text-secondary: #6b6b67;
+    --text-muted: #9e9e99;
+    --accent: #4f6ef7;
+    --accent-bg: #eef1fe;
+    --accent-text: #2d4adb;
+    --success: #1a7a4a;
+    --success-bg: #e6f5ee;
+    --warn-bg: #fff4e0;
+    --warn-text: #9a5c00;
+    --danger: #c23b22;
+    --danger-bg: #fdf0ee;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413;
+      --surface: #1e1e1c;
+      --surface2: #252523;
+      --border: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.14);
+      --text: #ebebea;
+      --text-secondary: #9e9e99;
+      --text-muted: #6b6b67;
+      --accent: #6b85fa;
+      --accent-bg: #1c2456;
+      --accent-text: #9ab2ff;
+      --success: #34c77b;
+      --success-bg: #0e2e1e;
+      --warn-bg: #2d2000;
+      --warn-text: #f0b429;
+      --danger: #f07060;
+      --danger-bg: #2e0f0b;
+      --shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem 1rem 4rem;
+  }
+  .page { max-width: 960px; margin: 0 auto; }
+
+  /* Header */
+  .header { margin-bottom: 2rem; }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 2px;
+  }
+  .header h1 .ti { font-size: 22px; color: var(--accent); }
+  .header .sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 32px;
+    margin-bottom: 6px;
+    letter-spacing: 0.3px;
+  }
+  .header p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+  /* Format hints */
+  .hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .hint-tag {
+    font-size: 11px;
+    font-family: monospace;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 9px;
+    color: var(--text-secondary);
+  }
+
+  /* Input section */
+  .input-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+  }
+  .input-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 150px;
+    resize: vertical;
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text-muted); }
+
+  /* Buttons */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 15px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.12s, opacity 0.12s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface2); }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger { color: var(--danger); }
+
+  /* Stats */
+  .stats {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .pill-blue { background: var(--accent-bg); color: var(--accent-text); }
+  .pill-green { background: var(--success-bg); color: var(--success); }
+  .pill-warn { background: var(--warn-bg); color: var(--warn-text); }
+
+  /* Grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+  }
+  .empty-state .ti { font-size: 48px; display: block; margin-bottom: 12px; opacity: 0.3; }
+  .empty-state p { font-size: 14px; }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    position: relative;
+    box-shadow: var(--shadow);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .card:hover .card-actions { opacity: 1; }
+
+  .card-img-wrap {
+    width: 100%;
+    height: 160px;
+    overflow: hidden;
+    position: relative;
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card-img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .img-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .img-placeholder .ti { font-size: 28px; }
+  .img-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--danger);
+    font-size: 12px;
+    background: var(--danger-bg);
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+  }
+  .img-error .ti { font-size: 28px; }
+
+  .card-body { padding: 10px 12px 12px; }
+  .card-name {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    word-break: break-all;
+    line-height: 1.4;
+    margin-bottom: 3px;
+  }
+  .card-url {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 5px;
+  }
+
+  .card-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .card-actions .btn {
+    padding: 5px 8px;
+    font-size: 12px;
+    background: rgba(255,255,255,0.92);
+    border-color: var(--border);
+    backdrop-filter: blur(4px);
+  }
+  @media (prefers-color-scheme: dark) {
+    .card-actions .btn { background: rgba(30,30,28,0.92); }
+  }
+  .card-actions .btn.del { color: var(--danger); }
+
+  .card-cb {
+    position: absolute;
+    top: 9px;
+    left: 9px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent);
+    z-index: 1;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--text);
+    color: var(--bg);
+    border-radius: var(--radius);
+    padding: 10px 20px;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    white-space: nowrap;
+    z-index: 9999;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Divider */
+  .section-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 1.5rem 0 0.75rem;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h1><i class="ti ti-photo-up"></i> 图片批量加载器</h1>
+    <div class="sub">Cypressmoor</div>
+    <p>每行一条，支持以下格式——备注即文件名：</p>
+    <div class="hints">
+      <span class="hint-tag">备注：链接</span>
+      <span class="hint-tag">备注--链接</span>
+      <span class="hint-tag">备注 链接</span>
+      <span class="hint-tag">链接 备注</span>
+      <span class="hint-tag">链接（无备注）</span>
+    </div>
+  </div>
+
+  <div class="input-card">
+    <div class="input-label"><i class="ti ti-list" style="font-size:14px"></i> 输入链接列表</div>
+    <textarea id="input" placeholder="猫咪睡觉：https://example.com/cat.jpg
+夜晚城市--https://example.com/city.png
+咖啡馆 https://example.com/cafe.webp
+https://example.com/arch.jpg 建筑一角
+https://example.com/solo.jpg"></textarea>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn primary" onclick="loadImages()"><i class="ti ti-photo-search"></i> 加载图片</button>
+    <button class="btn" id="sel-btn" onclick="selectAll()" disabled><i class="ti ti-checkbox"></i> 全选</button>
+    <button class="btn" id="dl-btn" onclick="downloadSelected()" disabled><i class="ti ti-download"></i> 下载选中</button>
+    <button class="btn" id="dla-btn" onclick="downloadAll()" disabled><i class="ti ti-package-export"></i> 下载全部</button>
+    <button class="btn" id="zip-btn" onclick="downloadZip()" disabled><i class="ti ti-file-zip"></i> 压缩包</button>
+    <button class="btn danger" id="clr-btn" onclick="clearAll()" disabled><i class="ti ti-trash"></i> 清空</button>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="empty-state">
+      <i class="ti ti-photo-off"></i>
+      <p>输入链接后点击「加载图片」</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let items = [];
+let selected = new Set();
+
+// ── 格式解析 ──────────────────────────────────────────────────
+const URL_RE = /https?:\/\/[^\s]+/i;
+
+function parseLine(line, idx) {
+  line = line.trim();
+  if (!line) return null;
+
+  const urlMatch = line.match(URL_RE);
+  if (!urlMatch) return null;
+  const url = urlMatch[0];
+  let rest = (line.slice(0, urlMatch.index) + line.slice(urlMatch.index + url.length)).trim();
+
+  // 清掉分隔符 ：: -- -
+  rest = rest.replace(/^[：:,，\-\s]+|[：:,，\-\s]+$/g, '').trim();
+
+  const name = rest || `图片${idx + 1}`;
+  return { url, name, id: Date.now() + idx };
+}
+
+function parse(text) {
+  return text.split('\n')
+    .map((l, i) => parseLine(l, i))
+    .filter(Boolean);
+}
+
+// ── 文件扩展名 ───────────────────────────────────────────────
+function getExt(url) {
+  try {
+    const p = new URL(url).pathname;
+    const d = p.lastIndexOf('.');
+    if (d > -1) {
+      const e = p.slice(d + 1).toLowerCase().split('?')[0];
+      if (['jpg','jpeg','png','gif','webp','svg','bmp','avif'].includes(e)) return '.' + e;
+    }
+  } catch {}
+  return '.jpg';
+}
+
+// ── 加载 ─────────────────────────────────────────────────────
+function loadImages() {
+  const raw = document.getElementById('input').value;
+  if (!raw.trim()) { toast('请输入至少一条链接'); return; }
+  items = parse(raw);
+  if (!items.length) { toast('没有识别到有效的链接，请检查格式'); return; }
+  selected.clear();
+  render();
+  updateControls();
+}
+
+function render() {
+  const grid = document.getElementById('grid');
+  if (!items.length) {
+    grid.innerHTML = `<div class="empty-state"><i class="ti ti-photo-off"></i><p>输入链接后点击「加载图片」</p></div>`;
+    return;
+  }
+  grid.innerHTML = items.map(it => `
+    <div class="card" id="card-${it.id}">
+      <input type="checkbox" class="card-cb" onchange="toggle(${it.id}, this.checked)" title="选择">
+      <div class="card-img-wrap" id="wrap-${it.id}">
+        <div class="img-placeholder"><i class="ti ti-loader-2"></i><span>加载中</span></div>
+      </div>
+      <div class="card-body">
+        <div class="card-name">${esc(it.name)}</div>
+        <div class="card-url" title="${esc(it.url)}">${esc(it.url)}</div>
+        <span id="status-${it.id}"><span class="pill pill-blue">加载中</span></span>
+      </div>
+      <div class="card-actions">
+        <button class="btn" onclick="downloadOne(${it.id})" title="下载"><i class="ti ti-download"></i></button>
+        <button class="btn del" onclick="removeItem(${it.id})" title="移除"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+  `).join('');
+
+  items.forEach(loadImg);
+}
+
+function loadImg(it) {
+  const wrap = document.getElementById('wrap-' + it.id);
+  if (!wrap) return;
+  const img = new Image();
+  img.onload = () => {
+    wrap.innerHTML = '';
+    wrap.appendChild(img);
+    document.getElementById('status-' + it.id).innerHTML = '<span class="pill pill-green"><i class="ti ti-check" style="font-size:10px"></i> 已加载</span>';
+  };
+  img.onerror = () => {
+    wrap.innerHTML = '<div class="img-error"><i class="ti ti-photo-x"></i><span>加载失败</span></div>';
+    document.getElementById('status-' + it.id).innerHTML = '<span class="pill pill-warn"><i class="ti ti-alert-triangle" style="font-size:10px"></i> 失败</span>';
+  };
+  img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+  img.alt = it.name;
+  img.src = it.url;
+}
+
+// ── 选择 ─────────────────────────────────────────────────────
+function toggle(id, checked) {
+  checked ? selected.add(id) : selected.delete(id);
+  updateControls();
+}
+
+function selectAll() {
+  const allSel = selected.size === items.length;
+  if (allSel) {
+    selected.clear();
+    document.querySelectorAll('.card-cb').forEach(cb => cb.checked = false);
+  } else {
+    items.forEach(it => selected.add(it.id));
+    document.querySelectorAll('.card-cb').forEach(cb => cb.checked = true);
+  }
+  updateControls();
+}
+
+function updateControls() {
+  const n = items.length, s = selected.size;
+  document.getElementById('sel-btn').disabled = n === 0;
+  document.getElementById('dl-btn').disabled = s === 0;
+  document.getElementById('dla-btn').disabled = n === 0;
+  document.getElementById('zip-btn').disabled = n === 0;
+  document.getElementById('clr-btn').disabled = n === 0;
+  const stats = document.getElementById('stats');
+  stats.innerHTML = n > 0
+    ? `共 <span class="pill pill-blue">${n}</span> 张 &nbsp; 已选 <span class="pill pill-green">${s}</span>`
+    : '';
+  const selBtn = document.getElementById('sel-btn');
+  if (selBtn) {
+    const isAll = s === n && n > 0;
+    selBtn.innerHTML = `<i class="ti ti-${isAll ? 'checkbox' : 'square'}"></i> ${isAll ? '取消全选' : '全选'}`;
+  }
+}
+
+// ── 下载单张 ─────────────────────────────────────────────────
+async function fetchAndSave(it) {
+  const filename = it.name + getExt(it.url);
+  try {
+    const res = await fetch(it.url, { mode: 'cors' });
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  } catch {
+    // fallback: open in new tab
+    const a = document.createElement('a');
+    a.href = it.url; a.download = filename; a.target = '_blank';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+}
+
+async function downloadOne(id) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  toast('下载中：' + it.name);
+  await fetchAndSave(it);
+}
+
+async function downloadSelected() {
+  const todl = items.filter(it => selected.has(it.id));
+  if (!todl.length) { toast('请先选择图片'); return; }
+  toast(`开始下载 ${todl.length} 张...`);
+  for (const it of todl) await fetchAndSave(it);
+  toast('下载完成 ✓');
+}
+
+async function downloadAll() {
+  if (!items.length) return;
+  toast(`开始下载全部 ${items.length} 张...`);
+  for (const it of items) await fetchAndSave(it);
+  toast('全部下载完成 ✓');
+}
+
+// ── 压缩包（ZIP） ──────────────────────────────────────────
+async function downloadZip() {
+  if (!items.length) { toast('没有图片可打包'); return; }
+  const zip = new JSZip();
+  let count = 0;
+  toast('正在打包...');
+
+  // 并行获取所有图片
+  const promises = items.map(async (it) => {
+    try {
+      const resp = await fetch(it.url, { mode: 'cors' });
+      const blob = await resp.blob();
+      const ext = getExt(it.url);
+      const filename = it.name + ext;
+      zip.file(filename, blob);
+      count++;
+    } catch (e) {
+      console.warn('获取失败：', it.url);
+    }
+  });
+
+  await Promise.all(promises);
+  if (count === 0) {
+    toast('没有成功获取任何图片，无法打包');
+    return;
+  }
+
+  const content = await zip.generateAsync({ type: 'blob' });
+  saveAs(content, '图片批量加载器.zip');
+  toast(`打包完成，共 ${count} 张`);
+}
+
+// ── 管理 ─────────────────────────────────────────────────────
+function removeItem(id) {
+  items = items.filter(it => it.id !== id);
+  selected.delete(id);
+  render(); updateControls();
+}
+
+function clearAll() {
+  items = []; selected.clear();
+  document.getElementById('input').value = '';
+  render(); updateControls();
+}
+
+// ── 工具 ─────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>
